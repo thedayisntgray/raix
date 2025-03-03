@@ -36,6 +36,10 @@ module Raix
                   :prediction, :repetition_penalty, :response_format, :stream, :temperature, :max_completion_tokens,
                   :max_tokens, :seed, :stop, :top_a, :top_k, :top_logprobs, :top_p, :tools, :tool_choice, :provider
 
+    # Maximum number of iterations before the circuit breaker trips
+    MAX_LOOP_ITERATIONS = 10
+    MAX_CONVERSATION_TURNS = 50
+
     # This method performs chat completion based on the provided transcript and parameters.
     #
     # @param params [Hash] The parameters for chat completion.
@@ -45,6 +49,18 @@ module Raix
     # @option params [Boolean] :raw (false) Whether to return the raw response or dig the text content.
     # @return [String|Hash] The completed chat response.
     def chat_completion(params: {}, loop: false, json: false, raw: false, openai: false)
+      # Initialize circuit breaker counters if needed
+      @loop_iteration_count ||= 0
+      
+      # Check circuit breakers
+      if @loop_iteration_count >= MAX_LOOP_ITERATIONS
+        raise CircuitBreakerTrippedError.new("Maximum loop iteration count (#{MAX_LOOP_ITERATIONS}) exceeded")
+      end
+      
+      if transcript.size >= MAX_CONVERSATION_TURNS
+        raise CircuitBreakerTrippedError.new("Maximum conversation turn count (#{MAX_CONVERSATION_TURNS}) exceeded")
+      end
+      
       # set params to default values if not provided
       params[:cache_at] ||= cache_at.presence
       params[:frequency_penalty] ||= frequency_penalty.presence
@@ -88,6 +104,9 @@ module Raix
       raise "Can't complete an empty transcript" if messages.blank?
 
       begin
+        # Increment the loop counter
+        @loop_iteration_count += 1 if loop
+
         response = if openai
                      openai_request(params:, model: openai, messages:)
                    else
@@ -116,6 +135,9 @@ module Raix
             send(function_name, arguments.with_indifferent_access)
           end
         end
+
+        # Reset the loop counter if we got a content response
+        @loop_iteration_count = 0
 
         response.tap do |res|
           content = res.dig("choices", 0, "message", "content")
@@ -164,6 +186,11 @@ module Raix
       @transcript ||= []
     end
 
+    # Reset circuit breaker counts
+    def reset_circuit_breakers!
+      @loop_iteration_count = 0
+    end
+
     private
 
     def openai_request(params:, model:, messages:)
@@ -202,4 +229,7 @@ module Raix
       end
     end
   end
+
+  # Custom error for circuit breaker tripping
+  class CircuitBreakerTrippedError < StandardError; end
 end

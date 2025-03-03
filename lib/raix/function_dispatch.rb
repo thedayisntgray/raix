@@ -3,6 +3,11 @@
 require "securerandom"
 module Raix
   # Provides declarative function definition for ChatCompletion classes.
+  # It uses circuit breaker pattern to prevent runaway loops when using the loop option.
+  # 
+  # By default, it limits function call loops to a maximum of 10 iterations and
+  # conversation turns to 50. These circuit breakers prevent accidental infinite
+  # loops and excessive API costs.
   #
   # Example:
   #

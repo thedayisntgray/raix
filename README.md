@@ -103,6 +103,25 @@ end
 
 Note that for security reasons, dispatching functions only works with functions implemented using `Raix::FunctionDispatch#function` or directly on the class.
 
+#### Circuit Breakers
+
+To prevent runaway loops that could lead to excessive API costs, Raix includes circuit breakers that automatically stop function looping after certain thresholds are reached:
+
+- `MAX_LOOP_ITERATIONS` (default: 10) - Maximum number of consecutive function calls without a text response
+- `MAX_CONVERSATION_TURNS` (default: 50) - Maximum total messages in the transcript
+
+When these limits are exceeded, Raix raises a `CircuitBreakerTrippedError`. You can reset the circuit breakers using the `reset_circuit_breakers!` method:
+
+```ruby
+begin
+  ai.chat_completion(loop: true)
+rescue Raix::CircuitBreakerTrippedError => e
+  puts "Circuit breaker tripped: #{e.message}"
+  ai.reset_circuit_breakers!
+  # Handle the error or continue with a modified approach
+end
+```
+
 #### Multiple Tool Calls
 
 Some AI models (like GPT-4) can make multiple tool calls in a single response. When this happens, Raix will automatically handle all the function calls sequentially and return an array of their results. Here's an example:
